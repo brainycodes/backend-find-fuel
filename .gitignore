@@ -1,0 +1,6 @@
+.env
+.env.local
+.env.development.local
+
+node_modules
+tests
