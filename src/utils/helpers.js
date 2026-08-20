@@ -4,7 +4,7 @@
 export function calculateDistance(lat1, lon1, lat2, lon2) {
   if (!lat1 || !lon1 || !lat2 || !lon2) return 0
   
-  const R = 6371 // Earth's radius in kilometers
+  const R = 6371
   const dLat = toRadians(lat2 - lat1)
   const dLon = toRadians(lon2 - lon1)
   
@@ -50,19 +50,19 @@ export function extractAmenities(tags) {
   
   const amenities = []
   const amenityMap = {
-    'toilets': '🚻 Toilet',
-    'shop': '🏪 Shop',
-    'atm': '🏧 ATM',
-    'car_wash': '🚗 Car Wash',
-    'compressed_air': '💨 Air Pump',
-    'wifi': '📶 WiFi',
-    'restaurant': '🍽️ Restaurant',
-    'fast_food': '🍔 Fast Food',
-    'cafe': '☕ Cafe',
-    'generator': '⚡ Generator',
-    'security': '🔒 Security',
-    'parking': '🅿️ Parking',
-    'wheelchair': '♿ Wheelchair Access'
+    'toilets': 'Toilet',
+    'shop': 'Shop',
+    'atm': 'ATM',
+    'car_wash': 'Car Wash',
+    'compressed_air': 'Air Pump',
+    'wifi': 'WiFi',
+    'restaurant': 'Restaurant',
+    'fast_food': 'Fast Food',
+    'cafe': 'Cafe',
+    'generator': 'Generator',
+    'security': 'Security',
+    'parking': 'Parking',
+    'wheelchair': 'Wheelchair Access'
   }
   
   for (const [key, value] of Object.entries(amenityMap)) {
@@ -85,21 +85,17 @@ export function extractFuelTypes(tags) {
     'fuel:octane_91': 'Regular 91',
     'fuel:octane_95': 'Premium 95',
     'fuel:octane_98': 'Premium 98',
-    'fuel:octane_100': 'Premium 100',
     'fuel:e10': 'E10',
     'fuel:e85': 'E85',
     'fuel:lpg': 'LPG',
     'fuel:cng': 'CNG',
-    'fuel:hydrogen': 'Hydrogen',
-    'fuel:electricity': 'Electric Charging',
-    'fuel:adblue': 'AdBlue'
+    'fuel:electricity': 'Electric Charging'
   }
   
   for (const [key, value] of Object.entries(fuelMap)) {
     if (tags[key] === 'yes') fuels.push(value)
   }
   
-  // If no specific fuels found but it's a fuel station, assume common types
   if (fuels.length === 0) {
     fuels.push('Petrol', 'Diesel')
   }
@@ -116,25 +112,10 @@ export function extractPaymentMethods(tags) {
   const methods = ['Cash']
   
   if (tags['payment:cards'] === 'yes' || tags['payment:credit_cards'] === 'yes') {
-    methods.push('Credit Card')
-  }
-  if (tags['payment:debit_cards'] === 'yes') {
-    methods.push('Debit Card')
+    methods.push('Card')
   }
   if (tags['payment:contactless'] === 'yes') {
     methods.push('Contactless')
-  }
-  if (tags['payment:mobile_payment'] === 'yes') {
-    methods.push('Mobile Payment')
-  }
-  if (tags['payment:american_express'] === 'yes') {
-    methods.push('American Express')
-  }
-  if (tags['payment:mastercard'] === 'yes') {
-    methods.push('Mastercard')
-  }
-  if (tags['payment:visa'] === 'yes') {
-    methods.push('Visa')
   }
   
   return methods
@@ -207,17 +188,15 @@ export function sleep(ms) {
 }
 
 /**
- * Retry with exponential backoff
+ * Retry with exponential backoff (limited for serverless)
  */
-export async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
+export async function retryWithBackoff(fn, maxRetries = 2, baseDelay = 500) {
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn()
     } catch (error) {
       if (i === maxRetries - 1) throw error
-      const delay = baseDelay * Math.pow(2, i)
-      console.log(`Retry ${i + 1}/${maxRetries} after ${delay}ms`)
-      await sleep(delay)
+      await sleep(baseDelay * Math.pow(2, i))
     }
   }
 }

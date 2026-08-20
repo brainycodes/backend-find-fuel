@@ -1,82 +1,24 @@
 import rateLimit from 'express-rate-limit'
-import { config } from '../config/index.js'
 
 /**
- * General rate limiter for all API routes
+ * General rate limiter - disabled for serverless
+ * Vercel has its own rate limiting built-in
  */
-export const generalLimiter = rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.maxRequests,
-  message: {
-    success: false,
-    error: {
-      message: 'Too many requests. Please try again later.',
-      code: 429,
-      retryAfter: '15 minutes'
-    }
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    return req.ip || req.connection.remoteAddress
-  },
-  handler: (req, res) => {
-    res.status(429).json({
-      success: false,
-      error: {
-        message: 'Too many requests. Please try again later.',
-        code: 429,
-        retryAfter: Math.ceil(req.rateLimit.resetTime / 1000)
-      }
-    })
-  }
-})
+export const generalLimiter = (req, res, next) => next()
 
 /**
- * Strict rate limiter for sensitive endpoints
+ * Strict rate limiter - disabled for serverless
  */
-export const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // 30 requests per window
-  message: {
-    success: false,
-    error: {
-      message: 'Rate limit exceeded for this endpoint.',
-      code: 429
-    }
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-})
+export const strictLimiter = (req, res, next) => next()
 
 /**
- * Price report rate limiter
+ * Price report rate limiter - disabled for serverless
  */
-export const reportLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // 10 reports per hour
-  message: {
-    success: false,
-    error: {
-      message: 'Too many price reports. Please wait before submitting another.',
-      code: 429
-    }
-  }
-})
+export const reportLimiter = (req, res, next) => next()
 
 /**
- * Create custom rate limiter
+ * Create custom rate limiter - returns no-op for serverless
  */
 export function createRateLimiter(options = {}) {
-  return rateLimit({
-    windowMs: options.windowMs || 15 * 60 * 1000,
-    max: options.max || 100,
-    message: options.message || {
-      success: false,
-      error: { message: 'Too many requests', code: 429 }
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-    ...options
-  })
+  return (req, res, next) => next()
 }

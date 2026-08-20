@@ -1,6 +1,7 @@
 import express from 'express'
 import { geoService } from '../services/geoService.js'
 import { asyncHandler } from '../middleware/errorHandler.js'
+import { getCountryFromCoordinates } from '../utils/helpers.js'
 
 const router = express.Router()
 
@@ -58,7 +59,7 @@ router.get('/coordinates',
       })
     }
 
-    const countryCode = require('../utils/helpers').getCountryFromCoordinates(
+    const countryCode = getCountryFromCoordinates(
       parseFloat(lat),
       parseFloat(lng)
     )

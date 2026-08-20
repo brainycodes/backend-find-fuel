@@ -8,7 +8,8 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "build": "echo 'No build needed for serverless'"
   },
   "keywords": ["fuel", "gas", "stations", "api", "real-time"],
   "author": "Solomon Zion",

@@ -4,7 +4,6 @@ import helmet from 'helmet'
 import morgan from 'morgan'
 import compression from 'compression'
 import { config } from './config/index.js'
-import { generalLimiter } from './middleware/rateLimiter.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import routes from './routes/index.js'
 
@@ -15,26 +14,18 @@ const app = express()
 // SECURITY MIDDLEWARE
 // ============================================
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", config.frontendUrl],
-    },
-  },
   crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: false
 }))
 
-// CORS
+// CORS - Allow all origins for serverless
 app.use(cors({
-  origin: config.frontendUrl,
-  credentials: true,
+  origin: '*',
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
-  maxAge: 86400, // 24 hours
+  maxAge: 86400
 }))
 
 // ============================================
@@ -49,9 +40,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.set('trust proxy', 1)
 
 // ============================================
-// RATE LIMITING
+// RATE LIMITING (disabled for serverless - doesn't work well)
 // ============================================
-app.use('/api/', generalLimiter)
+// app.use('/api/', generalLimiter)
 
 // ============================================
 // HEALTH CHECK
@@ -65,7 +56,7 @@ app.get('/api/v1/health', (req, res) => {
       timestamp: new Date().toISOString(),
       environment: config.nodeEnv,
       memory: process.memoryUsage(),
-      version: process.env.npm_package_version || '1.0.0',
+      version: process.env.npm_package_version || '1.0.0'
     }
   })
 })

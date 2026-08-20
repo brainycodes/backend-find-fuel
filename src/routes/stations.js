@@ -17,14 +17,12 @@ router.get('/nearby',
   asyncHandler(async (req, res) => {
     const { lat, lng, radius, country } = req.query
     
-    // Detect country if not provided
     let countryCode = country
     if (!countryCode) {
       const detected = await geoService.detectCountry(req)
       countryCode = detected.country_code
     }
 
-    // Get coordinates
     let latitude = lat ? parseFloat(lat) : null
     let longitude = lng ? parseFloat(lng) : null
     
@@ -36,7 +34,6 @@ router.get('/nearby',
 
     const searchRadius = radius ? parseFloat(radius) : 20
 
-    // Fetch stations and prices in parallel
     const [stations, officialPrices] = await Promise.all([
       osmService.getNearbyStations(latitude, longitude, searchRadius),
       priceService.getOfficialPrices(countryCode.toUpperCase())
@@ -62,6 +59,10 @@ router.get('/nearby',
   })
 )
 
+/**
+ * GET /api/v1/stations/google-nearby
+ * Get nearby fuel stations from Google Places
+ */
 router.get('/google-nearby',
   asyncHandler(async (req, res) => {
     const { lat, lng, radius } = req.query
@@ -115,7 +116,6 @@ router.get('/:id',
   asyncHandler(async (req, res) => {
     const { id } = req.params
     
-    // Search for station by ID (OSM ID)
     const results = await osmService.searchStations(id)
     
     if (!results || results.length === 0) {

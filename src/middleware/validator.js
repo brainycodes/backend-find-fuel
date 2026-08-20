@@ -21,7 +21,6 @@ export function validate(req, res, next) {
  * Common validation rules
  */
 export const rules = {
-  // Coordinates
   latitude: query('lat')
     .optional()
     .isFloat({ min: -90, max: 90 })
@@ -32,43 +31,36 @@ export const rules = {
     .isFloat({ min: -180, max: 180 })
     .withMessage('Longitude must be between -180 and 180'),
   
-  // Radius
   radius: query('radius')
     .optional()
     .isFloat({ min: 1, max: 100 })
     .withMessage('Radius must be between 1 and 100 km'),
   
-  // Country code
   countryCode: query('country')
     .optional()
     .isString()
     .isLength({ min: 2, max: 2 })
     .withMessage('Country code must be 2 characters'),
   
-  // Search query
   searchQuery: query('q')
     .isString()
     .isLength({ min: 2, max: 200 })
     .withMessage('Search query must be between 2 and 200 characters'),
   
-  // Station ID
   stationId: param('id')
     .isString()
     .notEmpty()
     .withMessage('Station ID is required'),
   
-  // Price
   price: body('price')
     .isFloat({ min: 0.01, max: 9999 })
     .withMessage('Price must be between 0.01 and 9999'),
   
-  // Fuel type
   fuelType: body('fuel_type')
     .isString()
     .notEmpty()
     .withMessage('Fuel type is required'),
   
-  // Currency
   currency: body('currency')
     .optional()
     .isString()

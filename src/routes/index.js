@@ -19,16 +19,18 @@ router.use('/geolocation', geolocationRouter)
 router.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'FuelFinder Pro API',
+    message: 'FindFuelSpot API',
     version: API_VERSION,
     endpoints: {
       stations: {
         nearby: `GET /api/${API_VERSION}/stations/nearby?lat={lat}&lng={lng}&radius={km}&country={code}`,
+        google: `GET /api/${API_VERSION}/stations/google-nearby?lat={lat}&lng={lng}&radius={km}`,
         search: `GET /api/${API_VERSION}/stations/search?q={query}&country={code}`
       },
       prices: {
         official: `GET /api/${API_VERSION}/prices/official/:country`,
-        report: `POST /api/${API_VERSION}/prices/report`
+        report: `POST /api/${API_VERSION}/prices/report`,
+        all: `GET /api/${API_VERSION}/prices/all`
       },
       countries: {
         list: `GET /api/${API_VERSION}/countries`,

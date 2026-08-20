@@ -45,21 +45,17 @@ export class ValidationError extends AppError {
  * Global error handler middleware
  */
 export function errorHandler(err, req, res, next) {
-  // Log error
   console.error('Error:', {
     message: err.message,
-    stack: err.stack,
     path: req.path,
     method: req.method,
     timestamp: new Date().toISOString()
   })
 
-  // Determine status code
   let statusCode = err.statusCode || 500
   let message = err.message || 'Internal Server Error'
   let code = err.code || 'INTERNAL_ERROR'
 
-  // Handle specific error types
   if (err.name === 'ValidationError') {
     statusCode = 400
     code = 'VALIDATION_ERROR'
@@ -77,7 +73,6 @@ export function errorHandler(err, req, res, next) {
     code = 'SERVICE_UNAVAILABLE'
   }
 
-  // Build response
   const response = {
     success: false,
     error: {
@@ -87,12 +82,11 @@ export function errorHandler(err, req, res, next) {
     }
   }
 
-  // Add stack trace in development
-  if (config.nodeEnv === 'development') {
+  // Only show stack in development, never in production serverless
+  if (config.nodeEnv === 'development' && err.stack) {
     response.error.stack = err.stack
   }
 
-  // Add validation errors if present
   if (err.errors) {
     response.error.details = err.errors
   }

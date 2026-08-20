@@ -2,7 +2,6 @@ import axios from 'axios'
 import { cacheService } from '../utils/cache.js'
 import { config } from '../config/index.js'
 import { COUNTRIES, FUEL_TYPES } from '../utils/constants.js'
-import { retryWithBackoff } from '../utils/helpers.js'
 
 export class PriceService {
   constructor() {
@@ -30,11 +29,11 @@ export class PriceService {
       switch (countryCode.toUpperCase()) {
         case 'US': prices = await this.getUSPrices(); break
         case 'NG': prices = this.getNigerianPrices(); break
-        case 'GB': prices = await this.getUKPrices(); break
+        case 'GB': prices = this.getUKPrices(); break
         case 'IN': prices = this.getIndianPrices(); break
         case 'KE': prices = this.getKenyanPrices(); break
         case 'ZA': prices = this.getSouthAfricanPrices(); break
-        default: prices = await this.scrapeCurrentPrices(countryCode)
+        default: prices = this.getEstimatedPrices(countryCode)
       }
 
       if (!prices || Object.keys(prices).length === 0) {
@@ -42,7 +41,7 @@ export class PriceService {
       }
 
       if (prices && Object.keys(prices).length > 0) {
-        cacheService.set(cacheKey, prices, 3600)
+        cacheService.set(cacheKey, prices, 600)
       }
 
       return prices || {}
@@ -52,69 +51,10 @@ export class PriceService {
     }
   }
 
-  async scrapeCurrentPrices(countryCode) {
-    try {
-      const response = await axios.get(
-        `https://www.globalpetrolprices.com/${countryCode.toLowerCase()}/gasoline_prices/`,
-        {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-          timeout: 10000
-        }
-      )
-
-      const html = response.data
-
-      // Extract gasoline price
-      const gasolineMatch = html.match(/"gasoline":\s*\{[^}]*"price":\s*([\d.]+)/)
-      const dieselMatch = html.match(/"diesel":\s*\{[^}]*"price":\s*([\d.]+)/)
-      const currencyMatch = html.match(/"currency":"(\w+)"/)
-
-      const currency = currencyMatch?.[1] || COUNTRIES[countryCode]?.currency || 'USD'
-
-      if (gasolineMatch) {
-        const prices = {
-          'Petrol': {
-            price: parseFloat(gasolineMatch[1]),
-            unit: 'litre',
-            currency: currency,
-            symbol: this.getSymbol(currency),
-            source: 'GlobalPetrolPrices.com',
-            sourceUrl: `https://www.globalpetrolprices.com/${countryCode}/gasoline_prices/`,
-            note: 'Current average price'
-          }
-        }
-
-        if (dieselMatch) {
-          prices['Diesel'] = {
-            price: parseFloat(dieselMatch[1]),
-            unit: 'litre',
-            currency: currency,
-            symbol: this.getSymbol(currency),
-            source: 'GlobalPetrolPrices.com',
-            sourceUrl: `https://www.globalpetrolprices.com/${countryCode}/diesel_prices/`,
-            note: 'Current average price'
-          }
-        }
-
-        return prices
-      }
-    } catch (e) {
-      console.error(`Scrape error for ${countryCode}:`, e.message)
-    }
-    return null
-  }
-
   async getUSPrices() {
-    if (!config.eiaApiKey) {
-      console.warn('EIA API key not configured, scraping instead')
-      const scraped = await this.scrapeCurrentPrices('US')
-      if (scraped) return scraped
-      return this.getEstimatedPrices('US')
-    }
-
-    try {
-      const response = await retryWithBackoff(async () => {
-        return await axios.get(`${this.eiaBaseUrl}/petroleum/pri/gnd/data/`, {
+    if (config.eiaApiKey) {
+      try {
+        const response = await axios.get(`${this.eiaBaseUrl}/petroleum/pri/gnd/data/`, {
           params: {
             api_key: config.eiaApiKey,
             frequency: 'weekly',
@@ -124,92 +64,81 @@ export class PriceService {
             'sort[0][direction]': 'desc',
             length: 5
           },
-          timeout: 10000
+          timeout: 5000
         })
-      })
 
-      const prices = {}
-      const productNames = { EPMR: 'Regular', EPMP: 'Premium', EPMD: 'Diesel' }
+        const prices = {}
+        const productNames = { EPMR: 'Regular', EPMP: 'Premium', EPMD: 'Diesel' }
 
-      if (response.data?.response?.data) {
-        response.data.response.data.forEach(item => {
-          const name = productNames[item.product] || item.product
-          if (!prices[name]) {
-            prices[name] = {
-              price: parseFloat(item.value),
-              unit: 'gallon',
-              currency: 'USD',
-              symbol: '$',
-              date: item.period,
-              source: 'U.S. Energy Information Administration',
-              sourceUrl: 'https://www.eia.gov/petroleum/gasdiesel/'
+        if (response.data?.response?.data) {
+          response.data.response.data.forEach(item => {
+            const name = productNames[item.product] || item.product
+            if (!prices[name]) {
+              prices[name] = {
+                price: parseFloat(item.value),
+                unit: 'gallon',
+                currency: 'USD',
+                symbol: '$',
+                date: item.period,
+                source: 'U.S. EIA'
+              }
             }
-          }
-        })
+          })
+        }
+        if (Object.keys(prices).length > 0) return prices
+      } catch (e) {
+        console.error('EIA error:', e.message)
       }
-      return prices
-    } catch (error) {
-      console.error('EIA API error:', error.message)
-      const scraped = await this.scrapeCurrentPrices('US')
-      return scraped || this.getEstimatedPrices('US')
     }
+    return this.getEstimatedPrices('US')
   }
 
   getNigerianPrices() {
     return {
       'Petrol (PMS)': {
         price: 568, unit: 'litre', currency: 'NGN', symbol: '₦',
-        date: new Date().toISOString().split('T')[0],
+        date: '2026-08-20',
         source: 'NMDPRA - Nigerian Government',
-        sourceUrl: 'https://nmdpra.gov.ng',
         note: 'Official pump price. May vary by location.'
       },
       'Diesel (AGO)': {
         price: 850, unit: 'litre', currency: 'NGN', symbol: '₦',
-        date: new Date().toISOString().split('T')[0],
+        date: '2026-08-20',
         source: 'NMDPRA - Nigerian Government',
         note: 'Deregulated price. Varies by marketer.'
       },
       'Kerosene (DPK)': {
         price: 750, unit: 'litre', currency: 'NGN', symbol: '₦',
-        date: new Date().toISOString().split('T')[0],
+        date: '2026-08-20',
         source: 'NMDPRA - Nigerian Government',
         note: 'Household kerosene price.'
       },
       'Cooking Gas (LPG)': {
         price: 1000, unit: 'kg', currency: 'NGN', symbol: '₦',
-        date: new Date().toISOString().split('T')[0],
+        date: '2026-08-20',
         source: 'NMDPRA - Nigerian Government',
         note: '12.5kg cylinder refill ~₦12,500'
       }
     }
   }
 
-  async getUKPrices() {
-    try {
-      await axios.get('https://www.gov.uk/api/content/government/statistics/weekly-road-fuel-prices', { timeout: 10000 })
-    } catch (e) {}
-
-    const scraped = await this.scrapeCurrentPrices('GB')
-    if (scraped) return scraped
-
+  getUKPrices() {
     return {
       'Unleaded': { price: 1.45, unit: 'litre', currency: 'GBP', symbol: '£', source: 'UK Government' },
-      'Super Unleaded': { price: 1.58, unit: 'litre', currency: 'GBP', symbol: '£', source: 'UK Government' },
       'Diesel': { price: 1.52, unit: 'litre', currency: 'GBP', symbol: '£', source: 'UK Government' }
     }
   }
 
   getIndianPrices() {
     return {
-      'Petrol': { price: 96.72, unit: 'litre', currency: 'INR', symbol: '₹', source: 'PPAC India', note: 'Delhi price. Varies by state.' },
-      'Diesel': { price: 89.62, unit: 'litre', currency: 'INR', symbol: '₹', source: 'PPAC India', note: 'Delhi price. Varies by state.' }
+      'Petrol': { price: 96.72, unit: 'litre', currency: 'INR', symbol: '₹', source: 'PPAC India', note: 'Delhi price.' },
+      'Diesel': { price: 89.62, unit: 'litre', currency: 'INR', symbol: '₹', source: 'PPAC India', note: 'Delhi price.' }
     }
   }
 
   getKenyanPrices() {
     return {
-      'Super Petrol': { price: 195, unit: 'litre', currency: 'KES', symbol: 'KSh', source: 'EPRA Kenya', note: 'Nairobi price. Monthly review.' },
+      'Super Petrol': { price: 195, unit: 'litre', currency: 'KES', symbol: 'KSh', source: 'EPRA Kenya' },
       'Diesel': { price: 180, unit: 'litre', currency: 'KES', symbol: 'KSh', source: 'EPRA Kenya' },
       'Kerosene': { price: 170, unit: 'litre', currency: 'KES', symbol: 'KSh', source: 'EPRA Kenya' }
     }
@@ -217,51 +146,30 @@ export class PriceService {
 
   getSouthAfricanPrices() {
     return {
-      'Petrol 93': { price: 23.50, unit: 'litre', currency: 'ZAR', symbol: 'R', source: 'Department of Energy SA', note: 'Coastal price. Inland slightly higher.' },
+      'Petrol 93': { price: 23.50, unit: 'litre', currency: 'ZAR', symbol: 'R', source: 'Department of Energy SA' },
       'Petrol 95': { price: 24.00, unit: 'litre', currency: 'ZAR', symbol: 'R', source: 'Department of Energy SA' },
-      'Diesel 0.05%': { price: 22.00, unit: 'litre', currency: 'ZAR', symbol: 'R', source: 'Department of Energy SA' }
+      'Diesel': { price: 22.00, unit: 'litre', currency: 'ZAR', symbol: 'R', source: 'Department of Energy SA' }
     }
   }
 
   getEstimatedPrices(countryCode) {
     const country = COUNTRIES[countryCode]
-    const fuelTypes = FUEL_TYPES[countryCode]
-
-    // If we have fuel types configured, use those
-    if (fuelTypes && fuelTypes.length > 0) {
-      const prices = {}
-      fuelTypes.forEach(fuel => {
-        if (fuel.avgPrice) {
-          prices[fuel.name] = {
-            price: fuel.avgPrice,
-            unit: fuel.unit,
-            currency: country?.currency || 'USD',
-            symbol: country?.symbol || '$',
-            source: 'Estimated regional data',
-            note: 'Estimated price. Actual prices may vary.'
-          }
-        }
-      })
-      if (Object.keys(prices).length > 0) return prices
-    }
-
-    // Generic fallback for any country
     return {
       'Petrol': {
         price: 1.50,
         unit: 'litre',
         currency: country?.currency || 'USD',
         symbol: country?.symbol || '$',
-        source: 'Estimated regional price',
-        note: 'Estimated. Actual prices may vary.'
+        source: 'Estimated',
+        note: 'Estimated. Check station for exact price.'
       },
       'Diesel': {
         price: 1.30,
         unit: 'litre',
         currency: country?.currency || 'USD',
         symbol: country?.symbol || '$',
-        source: 'Estimated regional price',
-        note: 'Estimated. Actual prices may vary.'
+        source: 'Estimated',
+        note: 'Estimated. Check station for exact price.'
       }
     }
   }

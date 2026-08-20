@@ -13,8 +13,8 @@ export const config = {
   host: process.env.HOST || '0.0.0.0',
   nodeEnv: process.env.NODE_ENV || 'development',
   
-  // Frontend
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+  // Frontend URL for CORS (use * for serverless)
+  frontendUrl: process.env.FRONTEND_URL || '*',
   
   // API Keys
   eiaApiKey: process.env.EIA_API_KEY || null,

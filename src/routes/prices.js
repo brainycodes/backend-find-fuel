@@ -2,7 +2,6 @@ import express from 'express'
 import { priceService } from '../services/priceService.js'
 import { priceValidation } from '../middleware/validator.js'
 import { asyncHandler, AppError } from '../middleware/errorHandler.js'
-import { reportLimiter } from '../middleware/rateLimiter.js'
 
 const router = express.Router()
 
@@ -17,16 +16,13 @@ router.get('/official/:country',
     
     const prices = await priceService.getOfficialPrices(countryCode)
 
-    if (!prices || Object.keys(prices).length === 0) {
-      throw new AppError('No official prices available for this country', 404, 'NOT_FOUND')
-    }
-
+    // Return empty object instead of 404 for serverless
     res.json({
       success: true,
       data: {
         country: countryCode,
-        prices,
-        count: Object.keys(prices).length,
+        prices: prices || {},
+        count: prices ? Object.keys(prices).length : 0,
         timestamp: new Date().toISOString()
       }
     })
@@ -38,12 +34,10 @@ router.get('/official/:country',
  * Report a fuel price
  */
 router.post('/report',
-  reportLimiter,
   priceValidation.report,
   asyncHandler(async (req, res) => {
     const { station_id, fuel_type, price, currency, country_code } = req.body
 
-    // Create report object (in production, save to database)
     const report = {
       id: `report_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       station_id,
@@ -52,7 +46,7 @@ router.post('/report',
       currency: currency || 'USD',
       country_code: (country_code || 'US').toUpperCase(),
       reported_at: new Date().toISOString(),
-      reported_by_ip: req.ip,
+      reported_by_ip: req.headers['x-forwarded-for'] || req.ip || 'unknown',
       verified: false,
       status: 'pending'
     }

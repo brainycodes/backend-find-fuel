@@ -4,15 +4,11 @@ import { config } from '../config/index.js'
 import { getCountryFromCoordinates } from '../utils/helpers.js'
 
 export class GeoService {
-  /**
-   * Get location from IP address
-   */
   async getLocationFromIP(ip) {
     const cacheKey = `ip_location_${ip}`
     const cached = cacheService.get(cacheKey)
     if (cached) return cached
 
-    // Skip localhost/private IPs
     if (this.isPrivateIP(ip)) {
       return this.getDefaultLocation()
     }
@@ -41,7 +37,7 @@ export class GeoService {
           is_eu: response.data.is_eu === true
         }
 
-        cacheService.set(cacheKey, location, 3600)
+        cacheService.set(cacheKey, location, 600)
         return location
       }
     } catch (error) {
@@ -51,11 +47,7 @@ export class GeoService {
     return this.getDefaultLocation()
   }
 
-  /**
-   * Detect country from request
-   */
   async detectCountry(req) {
-    // Try IP geolocation first
     const clientIP = this.getClientIP(req)
     const ipLocation = await this.getLocationFromIP(clientIP)
     
@@ -63,7 +55,6 @@ export class GeoService {
       return ipLocation
     }
 
-    // Try coordinates from query
     const { lat, lng } = req.query || {}
     if (lat && lng) {
       const countryCode = getCountryFromCoordinates(
@@ -75,7 +66,6 @@ export class GeoService {
       }
     }
 
-    // Accept-Language header
     const acceptLang = req.headers['accept-language']
     if (acceptLang) {
       const countryCode = this.extractCountryFromLanguage(acceptLang)
@@ -84,24 +74,17 @@ export class GeoService {
       }
     }
 
-    // Default fallback
     return { country_code: 'US', country_name: 'United States' }
   }
 
-  /**
-   * Get client IP address
-   */
   getClientIP(req) {
     return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
            req.headers['x-real-ip'] ||
            req.ip ||
-           req.connection.remoteAddress ||
+           req.connection?.remoteAddress ||
            '8.8.8.8'
   }
 
-  /**
-   * Check if IP is private/local
-   */
   isPrivateIP(ip) {
     if (!ip) return true
     
@@ -117,9 +100,6 @@ export class GeoService {
     )
   }
 
-  /**
-   * Extract country from language header
-   */
   extractCountryFromLanguage(acceptLanguage) {
     const langToCountry = {
       'en-US': 'US', 'en-GB': 'GB', 'en-CA': 'CA', 'en-AU': 'AU',
@@ -147,9 +127,6 @@ export class GeoService {
     return null
   }
 
-  /**
-   * Get default location (fallback)
-   */
   getDefaultLocation() {
     return {
       country_code: 'US',
@@ -163,9 +140,6 @@ export class GeoService {
     }
   }
 
-  /**
-   * Validate coordinates
-   */
   isValidCoordinates(lat, lng) {
     return (
       typeof lat === 'number' &&
@@ -176,5 +150,4 @@ export class GeoService {
   }
 }
 
-// Singleton instance
 export const geoService = new GeoService()

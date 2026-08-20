@@ -19,12 +19,10 @@ router.get('/',
       fuel_type_count: (FUEL_TYPES[code] || DEFAULT_FUEL_TYPES).length
     }))
 
-    // Filter by continent if specified
     if (continent && CONTINENTS[continent]) {
       countries = countries.filter(c => CONTINENTS[continent].includes(c.code))
     }
 
-    // Sort by name
     countries.sort((a, b) => a.name.localeCompare(b.name))
 
     res.json({
@@ -92,28 +90,6 @@ router.get('/:code/fuel-types',
       success: true,
       data: fuelTypes,
       count: fuelTypes.length
-    })
-  })
-)
-
-/**
- * GET /api/v1/countries/continents/list
- * Get all continents
- */
-router.get('/continents/list',
-  asyncHandler(async (req, res) => {
-    const continents = Object.entries(CONTINENTS).map(([name, countries]) => ({
-      name,
-      countries: countries.map(code => ({
-        code,
-        name: COUNTRIES[code]?.name
-      })),
-      country_count: countries.length
-    }))
-
-    res.json({
-      success: true,
-      data: continents
     })
   })
 )
