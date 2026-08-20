@@ -19,7 +19,7 @@ router.use('/geolocation', geolocationRouter)
 router.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'FindFuelSpot API',
+    message: 'FindFuel API',
     version: API_VERSION,
     endpoints: {
       stations: {
