@@ -1,3 +1,5 @@
+// backend/src/services/osmService.js
+
 import axios from 'axios'
 import { cacheService } from '../utils/cache.js'
 import { config } from '../config/index.js'
@@ -11,285 +13,365 @@ import {
 
 export class OSMService {
   constructor() {
-    this.baseUrl = config.apis.openstreetmap
-    this.nominatimUrl = config.apis.nominatim
+    this.mirrors = config.apis.openstreetmapMirrors || [config.apis.openstreetmap]
+    this.userAgent = 'FindFuelSpot/1.0'
   }
+
+  // ============================================================
+  // GET NEARBY STATIONS
+  // ============================================================
 
   async getNearbyStations(lat, lng, radiusKm = 20) {
-    const cacheKey = `osm_stations_${lat}_${lng}_${radiusKm}`
-    const cached = cacheService.get(cacheKey)
-    if (cached) return cached
+    const latitude = Number(lat)
+    const longitude = Number(lng)
+    const radius = Number(radiusKm)
 
-    try {
-      const radiusMeters = radiusKm * 1000
-      const query = this.buildOverpassQuery(lat, lng, radiusMeters)
-      
-      const response = await axios.post(
-        this.baseUrl,
-        `data=${encodeURIComponent(query)}`,
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'FuelFinder/1.0'
-          },
-          timeout: 8000
-        }
-      )
-
-      const stations = await this.processStations(response.data.elements, lat, lng)
-      
-      if (stations.length > 0) {
-        cacheService.set(cacheKey, stations, 300)
-        return stations
-      }
-    } catch (error) {
-      console.error('OSM fetch error, using fallback:', error.message)
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error('Valid coordinates required')
     }
 
-    return this.getFallbackStations(lat, lng, radiusKm)
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      throw new Error('Coordinates are outside valid ranges')
+    }
+
+    const radiusMeters = Math.min(Math.max(radius * 1000, 1000), 100000)
+    const cacheKey = `osm_${latitude.toFixed(4)}_${longitude.toFixed(4)}_${radiusMeters}`
+
+    const cached = cacheService.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
+    const query = this.buildOverpassQuery(latitude, longitude, radiusMeters)
+
+    for (const mirror of this.mirrors) {
+      try {
+        const response = await axios.post(
+          mirror,
+          `data=${encodeURIComponent(query)}`,
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent': this.userAgent,
+              Accept: 'application/json'
+            },
+            timeout: 20000
+          }
+        )
+
+        const elements = response.data?.elements
+
+        if (!Array.isArray(elements)) {
+          continue
+        }
+
+        const stations = await this.processStations(elements, latitude, longitude)
+
+        if (stations.length > 0) {
+          cacheService.set(cacheKey, stations, 300)
+          return stations
+        }
+
+        cacheService.set(cacheKey, [], 120)
+        return []
+      } catch (error) {
+        console.error(`Overpass failed ${mirror}:`, error.message)
+      }
+    }
+
+    return []
   }
 
-  getFallbackStations(lat, lng, radiusKm) {
-    const stations = [
-      {
-        id: 'station_fallback_1', osm_id: 9001,
-        name: 'NNPC Mega Station', brand: 'NNPC',
-        address: 'Central Business District, Abuja',
-        coordinates: { lat: lat + 0.01, lng: lng + 0.01 },
-        distance_km: 1.5,
-        phone: '+234 800 000 0001',
-        opening_hours: '24/7',
-        amenities: ['Toilet', 'Shop', 'ATM', 'Car Wash'],
-        fuel_types: ['Petrol (PMS)', 'Diesel (AGO)'],
-        payment_methods: ['Cash', 'POS/Card', 'Bank Transfer'],
-        source: 'fallback', data_quality: 'good'
-      },
-      {
-        id: 'station_fallback_2', osm_id: 9002,
-        name: 'TotalEnergies Service Station', brand: 'TotalEnergies',
-        address: 'Wuse Zone 2, Abuja',
-        coordinates: { lat: lat - 0.01, lng: lng + 0.02 },
-        distance_km: 2.8,
-        phone: '+234 800 000 0002',
-        opening_hours: '24/7',
-        amenities: ['Toilet', 'Shop', 'ATM'],
-        fuel_types: ['Petrol (PMS)', 'Diesel (AGO)'],
-        payment_methods: ['Cash', 'POS/Card'],
-        source: 'fallback', data_quality: 'good'
-      },
-      {
-        id: 'station_fallback_3', osm_id: 9003,
-        name: 'Oando Filling Station', brand: 'Oando',
-        address: 'Maitama, Abuja',
-        coordinates: { lat: lat + 0.02, lng: lng - 0.01 },
-        distance_km: 3.2,
-        phone: '+234 800 000 0003',
-        opening_hours: '06:00 - 22:00',
-        amenities: ['Toilet', 'Shop'],
-        fuel_types: ['Petrol (PMS)', 'Diesel (AGO)'],
-        payment_methods: ['Cash', 'POS/Card'],
-        source: 'fallback', data_quality: 'basic'
-      },
-      {
-        id: 'station_fallback_4', osm_id: 9004,
-        name: 'Mobil Service Station', brand: 'Mobil',
-        address: 'Garki, Abuja',
-        coordinates: { lat: lat - 0.02, lng: lng - 0.01 },
-        distance_km: 4.1,
-        phone: '+234 800 000 0004',
-        opening_hours: '24/7',
-        amenities: ['Toilet', 'Shop', 'ATM', 'Car Wash'],
-        fuel_types: ['Petrol (PMS)', 'Diesel (AGO)'],
-        payment_methods: ['Cash', 'POS/Card'],
-        source: 'fallback', data_quality: 'excellent'
-      },
-      {
-        id: 'station_fallback_5', osm_id: 9005,
-        name: 'Conoil Station', brand: 'Conoil',
-        address: 'Wuse, Abuja',
-        coordinates: { lat: lat + 0.015, lng: lng - 0.02 },
-        distance_km: 5.0,
-        phone: '+234 800 000 0005',
-        opening_hours: '24/7',
-        amenities: ['Toilet', 'Shop'],
-        fuel_types: ['Petrol (PMS)', 'Diesel (AGO)'],
-        payment_methods: ['Cash'],
-        source: 'fallback', data_quality: 'basic'
-      }
-    ]
-    return stations.filter(s => s.distance_km <= radiusKm)
-  }
+  // ============================================================
+  // OVERPASS QUERY - Include address tags and nearby streets
+  // ============================================================
 
   buildOverpassQuery(lat, lng, radiusMeters) {
     return `
-      [out:json][timeout:7];
+      [out:json][timeout:25];
       (
         node["amenity"="fuel"](around:${radiusMeters},${lat},${lng});
         way["amenity"="fuel"](around:${radiusMeters},${lat},${lng});
+        relation["amenity"="fuel"](around:${radiusMeters},${lat},${lng});
       );
-      out body center 15;
+      out body center;
+      
+      // Get nearby streets for addresses
+      way["highway"~"^(residential|primary|secondary|tertiary|service|unclassified)$"](around:50,${lat},${lng});
+      out tags center 100;
     `
   }
 
-  async getAddressFromCoordinates(lat, lng) {
-    const cacheKey = `addr_${lat.toFixed(5)}_${lng.toFixed(5)}`
-    const cached = cacheService.get(cacheKey)
-    if (cached) return cached
-
-    try {
-      const response = await axios.get(
-        `${this.nominatimUrl}/reverse`,
-        {
-          params: { lat, lon: lng, format: 'json', addressdetails: 1, zoom: 18 },
-          headers: { 'User-Agent': 'FuelFinder/1.0', 'Accept-Language': 'en' },
-          timeout: 5000
-        }
-      )
-
-      if (response.data?.address) {
-        const addr = response.data.address
-        const parts = [
-          addr.road || addr.street || addr.pedestrian,
-          addr.suburb || addr.neighbourhood || addr.district || addr.quarter,
-          addr.city || addr.town || addr.state || addr.county
-        ].filter(Boolean)
-        
-        const shortAddress = parts.length > 0 ? parts.join(', ') : response.data.display_name
-        cacheService.set(cacheKey, shortAddress, 86400)
-        return shortAddress
-      }
-    } catch (error) {
-      // Silently fail
-    }
-    return null
-  }
+  // ============================================================
+  // PROCESS STATIONS
+  // ============================================================
 
   async processStations(elements, userLat, userLng) {
-    if (!elements || !Array.isArray(elements)) return []
+    if (!Array.isArray(elements)) {
+      return []
+    }
 
-    const stations = elements
-      .filter(el => el.tags?.amenity === 'fuel')
-      .map(el => {
-        const stationLat = el.lat || el.center?.lat
-        const stationLng = el.lon || el.center?.lon
-        
-        if (!stationLat || !stationLng) return null
+    // Separate stations from streets
+    const stationElements = elements.filter(el => 
+      el.tags?.amenity === 'fuel' || 
+      el.type === 'relation'
+    )
+    
+    const streetElements = elements.filter(el => 
+      el.tags?.highway && el.tags?.name
+    )
 
-        const distance = calculateDistance(userLat, userLng, stationLat, stationLng)
-        const tags = el.tags || {}
+    // Create street lookup map
+    const streets = new Map()
+    streetElements.forEach(street => {
+      if (street.tags?.name) {
+        streets.set(street.id, street.tags.name)
+      }
+    })
+
+    const stations = stationElements
+      .map(element => {
+        const stationLat = Number(element.lat ?? element.center?.lat)
+        const stationLng = Number(element.lon ?? element.center?.lon)
+
+        if (!Number.isFinite(stationLat) || !Number.isFinite(stationLng)) {
+          return null
+        }
+
+        const tags = element.tags || {}
+
+        // Build address from OSM tags
+        const address = this.buildAddressFromTags(tags, element, streets)
 
         return {
-          id: `station_${el.id}`,
-          osm_id: el.id,
-          osm_type: el.type,
-          name: tags.name || tags.brand || 'Fuel Station',
-          brand: tags.brand || tags.operator || null,
+          id: `osm_${element.type}_${element.id}`,
+          osm_id: element.id,
+          osm_type: element.type,
+          name: tags.name || tags.brand || tags.operator || 'Fuel Station',
+          brand: tags.brand || null,
           operator: tags.operator || null,
-          address: formatAddress(tags) || null,
-          coordinates: { lat: stationLat, lng: stationLng },
-          distance_km: distance,
-          phone: tags.phone || null,
-          website: tags.website || null,
-          email: tags.email || null,
-          opening_hours: tags.opening_hours || 'Not specified',
+          address: address || null,
+          coordinates: {
+            lat: stationLat,
+            lng: stationLng
+          },
+          distance_km: calculateDistance(userLat, userLng, stationLat, stationLng),
+          phone: tags.phone || tags['contact:phone'] || null,
+          website: tags.website || tags['contact:website'] || null,
+          opening_hours: tags.opening_hours || null,
           amenities: extractAmenities(tags),
           fuel_types: extractFuelTypes(tags),
           payment_methods: extractPaymentMethods(tags),
-          wheelchair_accessible: tags.wheelchair === 'yes',
-          has_car_wash: tags.car_wash === 'yes',
-          has_shop: tags.shop === 'yes' || tags.shop === 'convenience',
-          is_24_hours: tags.opening_hours === '24/7',
+          fuel_prices: [],
+          fuel_price_source: null,
+          fuel_price_status: 'not_available',
           source: 'openstreetmap',
-          last_updated: el.timestamp || new Date().toISOString(),
-          data_quality: this.assessDataQuality(tags)
+          source_url: `https://www.openstreetmap.org/${element.type}/${element.id}`,
+          last_updated: new Date().toISOString(),
+          data_quality: address ? 'good' : 'basic'
         }
       })
       .filter(Boolean)
-      .sort((a, b) => a.distance_km - b.distance_km)
 
-    // Reverse geocode stations with null addresses (first 10 only for serverless)
-    const needAddress = stations.filter(s => !s.address).slice(0, 10)
-    if (needAddress.length > 0) {
-      await Promise.allSettled(
-        needAddress.map(async (station) => {
-          const addr = await this.getAddressFromCoordinates(
-            station.coordinates.lat,
-            station.coordinates.lng
-          )
-          if (addr) {
-            station.address = addr
-            if (station.data_quality === 'minimal') station.data_quality = 'basic'
-          }
-        })
-      )
-    }
+    stations.sort((a, b) => a.distance_km - b.distance_km)
 
     return stations
   }
 
-  assessDataQuality(tags) {
-    let score = 0
-    const fields = ['name', 'brand', 'operator', 'phone', 'website', 'opening_hours']
-    fields.forEach(field => { if (tags[field]) score++ })
-    if (score >= 5) return 'excellent'
-    if (score >= 3) return 'good'
-    if (score >= 1) return 'basic'
-    return 'minimal'
+  // ============================================================
+  // BUILD ADDRESS FROM OSM TAGS
+  // ============================================================
+
+  buildAddressFromTags(tags, element, streets) {
+    if (!tags) {
+      return null
+    }
+
+    const parts = []
+
+    // House number
+    if (tags['addr:housenumber']) {
+      parts.push(tags['addr:housenumber'])
+    }
+
+    // Street name
+    const streetName = 
+      tags['addr:street'] || 
+      tags['addr:road'] ||
+      tags['addr:place'] ||
+      tags['addr:full']
+    
+    if (streetName) {
+      parts.push(streetName)
+    } else if (element.type === 'way' && tags.name) {
+      // If the way itself is named, use that as street
+      parts.push(tags.name)
+    }
+
+    // Suburb/Neighborhood
+    if (tags['addr:suburb'] || tags['addr:neighbourhood'] || tags['addr:quarter']) {
+      parts.push(tags['addr:suburb'] || tags['addr:neighbourhood'] || tags['addr:quarter'])
+    }
+
+    // City/Town
+    if (tags['addr:city'] || tags['addr:town'] || tags['addr:municipality'] || tags['addr:village']) {
+      parts.push(tags['addr:city'] || tags['addr:town'] || tags['addr:municipality'] || tags['addr:village'])
+    }
+
+    // State/Province
+    if (tags['addr:state'] || tags['addr:province'] || tags['addr:region']) {
+      parts.push(tags['addr:state'] || tags['addr:province'] || tags['addr:region'])
+    }
+
+    // Postcode
+    if (tags['addr:postcode']) {
+      parts.push(tags['addr:postcode'])
+    }
+
+    // If we have structured address parts, return them
+    if (parts.length > 0) {
+      return parts.join(', ')
+    }
+
+    // Try addr:full
+    if (typeof tags['addr:full'] === 'string' && tags['addr:full'].trim()) {
+      return tags['addr:full'].trim()
+    }
+
+    // Try to construct from brand/operator and nearby landmarks
+    const fallbackParts = []
+    
+    if (tags.brand) {
+      fallbackParts.push(tags.brand)
+    }
+    
+    if (tags.operator && tags.operator !== tags.brand) {
+      fallbackParts.push(tags.operator)
+    }
+
+    // If station is on a named way, use that
+    if (element.type === 'way' && tags.name) {
+      fallbackParts.push(tags.name)
+    }
+
+    if (fallbackParts.length > 0) {
+      return fallbackParts.join(', ')
+    }
+
+    return null
   }
 
+  // ============================================================
+  // SEARCH STATIONS
+  // ============================================================
+
   async searchStations(query, countryCode = null) {
-    const cacheKey = `osm_search_${query}_${countryCode}`
-    const cached = cacheService.get(cacheKey)
-    if (cached) return cached
+    if (typeof query !== 'string' || query.trim().length < 2) {
+      return []
+    }
 
     try {
       const params = new URLSearchParams({
-        q: `${query} fuel station`,
-        format: 'json',
-        limit: 10,
-        addressdetails: 1
+        q: `${query.trim()} fuel station`,
+        format: 'jsonv2',
+        limit: '10',
+        addressdetails: '1',
+        dedupe: '1'
       })
-      if (countryCode) params.append('countrycodes', countryCode.toLowerCase())
+
+      if (countryCode) {
+        params.append('countrycodes', countryCode.toLowerCase())
+      }
 
       const response = await axios.get(
-        `${this.nominatimUrl}/search?${params.toString()}`,
-        { headers: { 'User-Agent': 'FuelFinder/1.0', 'Accept-Language': 'en' }, timeout: 5000 }
+        `https://nominatim.openstreetmap.org/search?${params.toString()}`,
+        {
+          headers: {
+            'User-Agent': this.userAgent,
+            Accept: 'application/json',
+            'Accept-Language': 'en'
+          },
+          timeout: 10000
+        }
       )
 
-      const results = response.data.map(item => ({
-        id: `search_${item.place_id}`,
-        osm_id: item.osm_id,
-        name: item.display_name?.split(',')[0] || 'Unknown',
-        address: item.display_name,
-        coordinates: { lat: parseFloat(item.lat), lng: parseFloat(item.lon) },
-        type: item.type,
-        importance: item.importance
-      }))
+      if (!Array.isArray(response.data)) {
+        return []
+      }
 
-      cacheService.set(cacheKey, results, 3600)
-      return results
+      return response.data
+        .map(item => {
+          const latitude = Number(item.lat)
+          const longitude = Number(item.lon)
+
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            return null
+          }
+
+          const address = this.getNominatimAddress(item)
+
+          return {
+            id: `search_${item.place_id}`,
+            place_id: item.place_id,
+            name: item.name || item.display_name?.split(',')[0] || 'Fuel Station',
+            address,
+            coordinates: {
+              lat: latitude,
+              lng: longitude
+            },
+            type: item.type || null,
+            category: item.category || null,
+            osm_type: item.osm_type || null,
+            osm_id: item.osm_id || null,
+            source: 'nominatim',
+            source_url: item.osm_type && item.osm_id
+              ? `https://www.openstreetmap.org/${item.osm_type}/${item.osm_id}`
+              : null
+          }
+        })
+        .filter(Boolean)
     } catch (error) {
-      console.error('OSM search error:', error.message)
+      console.error('Nominatim station search failed:', error.message)
       return []
     }
   }
 
-  async reverseGeocode(lat, lng) {
-    const cacheKey = `osm_reverse_${lat}_${lng}`
-    const cached = cacheService.get(cacheKey)
-    if (cached) return cached
+  // ============================================================
+  // NOMINATIM ADDRESS
+  // ============================================================
 
-    try {
-      const response = await axios.get(
-        `${this.nominatimUrl}/reverse`,
-        { params: { lat, lon: lng, format: 'json', addressdetails: 1 }, headers: { 'User-Agent': 'FuelFinder/1.0' }, timeout: 5000 }
-      )
-      cacheService.set(cacheKey, response.data, 86400)
-      return response.data
-    } catch (error) {
-      console.error('Reverse geocode error:', error.message)
+  getNominatimAddress(item) {
+    if (!item) {
       return null
     }
+
+    const address = item.address
+
+    if (!address) {
+      if (item.display_name) {
+        return item.display_name
+      }
+      return null
+    }
+
+    const parts = [
+      address.house_number,
+      address.road || address.street || address.pedestrian,
+      address.neighbourhood || address.suburb || address.quarter,
+      address.city || address.town || address.municipality || address.village,
+      address.state,
+      address.postcode
+    ].filter(Boolean)
+
+    if (parts.length > 0) {
+      return parts.join(', ')
+    }
+
+    if (item.display_name) {
+      return item.display_name
+    }
+
+    return null
   }
 }
 

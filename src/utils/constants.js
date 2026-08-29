@@ -35,48 +35,111 @@ export const COUNTRIES = {
 }
 
 export const FUEL_TYPES = {
-  US: [
-    { key: 'regular', name: 'Regular', unit: 'gallon', avgPrice: 3.50 },
-    { key: 'midgrade', name: 'Midgrade', unit: 'gallon', avgPrice: 3.80 },
-    { key: 'premium', name: 'Premium', unit: 'gallon', avgPrice: 4.10 },
-    { key: 'diesel', name: 'Diesel', unit: 'gallon', avgPrice: 4.00 }
-  ],
   NG: [
-    { key: 'pms', name: 'Petrol (PMS)', unit: 'litre', avgPrice: 568 },
-    { key: 'ago', name: 'Diesel (AGO)', unit: 'litre', avgPrice: 850 },
-    { key: 'dpk', name: 'Kerosene (DPK)', unit: 'litre', avgPrice: 750 },
-    { key: 'lpg', name: 'Cooking Gas', unit: 'kg', avgPrice: 1000 }
+    {
+      key: 'pms',
+      name: 'Petrol (PMS)',
+      unit: 'litre'
+    },
+
+    {
+      key: 'ago',
+      name: 'Diesel (AGO)',
+      unit: 'litre'
+    },
+
+    {
+      key: 'dpk',
+      name: 'Kerosene (DPK)',
+      unit: 'litre'
+    },
+
+    {
+      key: 'lpg',
+      name: 'LPG',
+      unit: 'litre'
+    }
   ],
+
+  US: [
+    {
+      key: 'regular',
+      name: 'Regular',
+      unit: 'gallon'
+    },
+
+    {
+      key: 'midgrade',
+      name: 'Midgrade',
+      unit: 'gallon'
+    },
+
+    {
+      key: 'premium',
+      name: 'Premium',
+      unit: 'gallon'
+    },
+
+    {
+      key: 'diesel',
+      name: 'Diesel',
+      unit: 'gallon'
+    }
+  ],
+
   GB: [
-    { key: 'unleaded', name: 'Unleaded', unit: 'litre', avgPrice: 1.45 },
-    { key: 'super_unleaded', name: 'Super Unleaded', unit: 'litre', avgPrice: 1.58 },
-    { key: 'diesel', name: 'Diesel', unit: 'litre', avgPrice: 1.52 }
+    {
+      key: 'unleaded',
+      name: 'Unleaded',
+      unit: 'litre'
+    },
+
+    {
+      key: 'super_unleaded',
+      name: 'Super Unleaded',
+      unit: 'litre'
+    },
+
+    {
+      key: 'diesel',
+      name: 'Diesel',
+      unit: 'litre'
+    }
   ],
+
   IN: [
-    { key: 'petrol', name: 'Petrol', unit: 'litre', avgPrice: 96 },
-    { key: 'diesel', name: 'Diesel', unit: 'litre', avgPrice: 89 },
-    { key: 'cng', name: 'CNG', unit: 'kg', avgPrice: 76 }
-  ],
-  DE: [
-    { key: 'super_e5', name: 'Super E5', unit: 'litre', avgPrice: 1.75 },
-    { key: 'super_e10', name: 'Super E10', unit: 'litre', avgPrice: 1.70 },
-    { key: 'diesel', name: 'Diesel', unit: 'litre', avgPrice: 1.65 }
-  ],
-  AE: [
-    { key: 'special_95', name: 'Special 95', unit: 'litre', avgPrice: 2.90 },
-    { key: 'super_98', name: 'Super 98', unit: 'litre', avgPrice: 3.05 },
-    { key: 'diesel', name: 'Diesel', unit: 'litre', avgPrice: 3.15 }
-  ],
-  AU: [
-    { key: 'unleaded_91', name: 'Unleaded 91', unit: 'litre', avgPrice: 1.90 },
-    { key: 'premium_95', name: 'Premium 95', unit: 'litre', avgPrice: 2.05 },
-    { key: 'diesel', name: 'Diesel', unit: 'litre', avgPrice: 2.00 }
+    {
+      key: 'petrol',
+      name: 'Petrol',
+      unit: 'litre'
+    },
+
+    {
+      key: 'diesel',
+      name: 'Diesel',
+      unit: 'litre'
+    },
+
+    {
+      key: 'cng',
+      name: 'CNG',
+      unit: 'kg'
+    }
   ]
 }
 
 export const DEFAULT_FUEL_TYPES = [
-  { key: 'petrol', name: 'Petrol', unit: 'litre', avgPrice: null },
-  { key: 'diesel', name: 'Diesel', unit: 'litre', avgPrice: null }
+  {
+    key: 'petrol',
+    name: 'Petrol',
+    unit: 'litre'
+  },
+
+  {
+    key: 'diesel',
+    name: 'Diesel',
+    unit: 'litre'
+  }
 ]
 
 export const CONTINENTS = {

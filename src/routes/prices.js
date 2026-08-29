@@ -1,79 +1,136 @@
 import express from 'express'
-import { priceService } from '../services/priceService.js'
-import { priceValidation } from '../middleware/validator.js'
-import { asyncHandler, AppError } from '../middleware/errorHandler.js'
 
-const router = express.Router()
+import {
+  priceService
+} from '../services/priceService.js'
 
-/**
- * GET /api/v1/prices/official/:country
- * Get official prices for a country
- */
-router.get('/official/:country',
-  asyncHandler(async (req, res) => {
-    const { country } = req.params
-    const countryCode = country.toUpperCase()
-    
-    const prices = await priceService.getOfficialPrices(countryCode)
+import {
+  priceValidation
+} from '../middleware/validator.js'
 
-    // Return empty object instead of 404 for serverless
-    res.json({
-      success: true,
-      data: {
-        country: countryCode,
-        prices: prices || {},
-        count: prices ? Object.keys(prices).length : 0,
-        timestamp: new Date().toISOString()
+import {
+  asyncHandler
+} from '../middleware/errorHandler.js'
+
+import {
+  COUNTRIES
+} from '../utils/constants.js'
+
+const router =
+  express.Router()
+
+router.get(
+  '/official/:country',
+
+  asyncHandler(
+    async (req, res) => {
+      const country =
+        req.params.country
+          .toUpperCase()
+
+      if (!COUNTRIES[country]) {
+        return res.status(404).json({
+          success: false,
+
+          error: {
+            message:
+              `Country '${country}' is not supported`
+          }
+        })
       }
-    })
-  })
-)
 
-/**
- * POST /api/v1/prices/report
- * Report a fuel price
- */
-router.post('/report',
-  priceValidation.report,
-  asyncHandler(async (req, res) => {
-    const { station_id, fuel_type, price, currency, country_code } = req.body
+      const prices =
+        await priceService
+          .getOfficialPrices(
+            country
+          )
 
-    const report = {
-      id: `report_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      station_id,
-      fuel_type,
-      price: parseFloat(price),
-      currency: currency || 'USD',
-      country_code: (country_code || 'US').toUpperCase(),
-      reported_at: new Date().toISOString(),
-      reported_by_ip: req.headers['x-forwarded-for'] || req.ip || 'unknown',
-      verified: false,
-      status: 'pending'
+      res.json({
+        success: true,
+
+        data: {
+          country,
+
+          prices:
+            prices || {},
+
+          count:
+            prices
+              ? Object.keys(prices)
+                  .length
+              : 0,
+
+          available:
+            Boolean(
+              prices &&
+              Object.keys(prices)
+                .length
+            ),
+
+          timestamp:
+            new Date()
+              .toISOString()
+        }
+      })
     }
-
-    res.status(201).json({
-      success: true,
-      data: report,
-      message: 'Price reported successfully. Thank you for your contribution!'
-    })
-  })
+  )
 )
 
-/**
- * GET /api/v1/prices/all
- * Get prices for all countries
- */
-router.get('/all',
-  asyncHandler(async (req, res) => {
-    const allPrices = await priceService.getAllPrices()
-    
-    res.json({
-      success: true,
-      data: allPrices,
-      count: Object.keys(allPrices).length,
-      timestamp: new Date().toISOString()
-    })
-  })
+router.post(
+  '/report',
+
+  priceValidation.report,
+
+  asyncHandler(
+    async (req, res) => {
+      const {
+        station_id,
+        fuel_type,
+        price,
+        currency,
+        country_code
+      } = req.body
+
+      const report = {
+        station_id,
+
+        fuel_type,
+
+        price:
+          Number(price),
+
+        currency:
+          currency
+            ?.toUpperCase() ||
+          null,
+
+        country_code:
+          country_code
+            ?.toUpperCase() ||
+          null,
+
+        reported_at:
+          new Date()
+            .toISOString(),
+
+        verified:
+          false,
+
+        status:
+          'pending'
+      }
+
+      res.status(201).json({
+        success: true,
+
+        data:
+          report,
+
+        message:
+          'Price submitted for verification.'
+      })
+    }
+  )
 )
 
 export default router

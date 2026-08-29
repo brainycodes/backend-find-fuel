@@ -1,88 +1,314 @@
 import axios from 'axios'
-import { cacheService } from '../utils/cache.js'
+
+import {
+  cacheService
+} from '../utils/cache.js'
+
+import {
+  config
+} from '../config/index.js'
+
+import {
+  calculateDistance
+} from '../utils/helpers.js'
 
 export class GooglePlacesService {
   constructor() {
-    this.apiKey = process.env.GOOGLE_PLACES_API_KEY
-    this.baseUrl = 'https://maps.googleapis.com/maps/api/place'
+    this.apiKey =
+      config.googlePlacesApiKey
+
+    this.baseUrl =
+      config.apis.googlePlaces
   }
 
-  async getNearbyStations(lat, lng, radiusKm = 20) {
-    const cacheKey = `google_stations_${lat.toFixed(4)}_${lng.toFixed(4)}_${radiusKm}`
-    const cached = cacheService.get(cacheKey)
-    if (cached) return cached
-
-    if (!this.apiKey) {
-      console.warn('Google Places API key not configured')
-      return []
-    }
-
-    try {
-      const response = await axios.get(`${this.baseUrl}/nearbysearch/json`, {
-        params: {
-          location: `${lat},${lng}`,
-          radius: radiusKm * 1000,
-          type: 'gas_station',
-          key: this.apiKey
-        },
-        timeout: 5000
-      })
-
-      const stations = response.data.results.map(place => ({
-        id: `google_${place.place_id}`,
-        place_id: place.place_id,
-        name: place.name,
-        address: place.vicinity,
-        coordinates: {
-          lat: place.geometry.location.lat,
-          lng: place.geometry.location.lng
-        },
-        rating: place.rating || null,
-        total_ratings: place.user_ratings_total || 0,
-        open_now: place.opening_hours?.open_now ?? null,
-        source: 'google_places'
-      }))
-
-      cacheService.set(cacheKey, stations, 300)
-      return stations
-    } catch (error) {
-      console.error('Google Places error:', error.message)
-      return []
-    }
+  isConfigured() {
+    return Boolean(
+      this.apiKey
+    )
   }
 
-  async getPlaceDetails(placeId) {
-    const cacheKey = `google_details_${placeId}`
-    const cached = cacheService.get(cacheKey)
-    if (cached) return cached
+  async getNearbyStations(
+    lat,
+    lng,
+    radiusKm = 20
+  ) {
+    if (!this.isConfigured()) {
+      throw new Error(
+        'GOOGLE_PLACES_API_KEY is not configured'
+      )
+    }
 
-    if (!this.apiKey) return null
+    const latitude = Number(lat)
+    const longitude = Number(lng)
 
-    try {
-      const res = await axios.get(`${this.baseUrl}/details/json`, {
-        params: {
-          place_id: placeId,
-          fields: 'formatted_phone_number,website,opening_hours,formatted_address,url',
-          key: this.apiKey
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude)
+    ) {
+      throw new Error(
+        'Valid latitude and longitude are required'
+      )
+    }
+
+    const radiusMeters =
+      Math.min(
+        Math.max(
+          Number(radiusKm) * 1000,
+          100
+        ),
+        50000
+      )
+
+    const cacheKey =
+      `google_fuel_${latitude.toFixed(4)}_${longitude.toFixed(4)}_${radiusMeters}`
+
+    const cached =
+      cacheService.get(cacheKey)
+
+    if (cached) {
+      return cached
+    }
+
+    const response =
+      await axios.post(
+        `${this.baseUrl}/places:searchNearby`,
+
+        {
+          includedTypes: [
+            'gas_station'
+          ],
+
+          maxResultCount: 20,
+
+          rankPreference:
+            'DISTANCE',
+
+          locationRestriction: {
+            circle: {
+              center: {
+                latitude,
+                longitude
+              },
+
+              radius:
+                radiusMeters
+            }
+          }
         },
-        timeout: 5000
-      })
 
-      const result = res.data.result
-      const details = {
-        phone: result.formatted_phone_number || null,
-        website: result.website || null,
-        opening_hours: result.opening_hours?.weekday_text || null,
-        open_now: result.opening_hours?.open_now || false,
-        google_maps_url: result.url || null
-      }
+        {
+          headers: {
+            'Content-Type':
+              'application/json',
 
-      cacheService.set(cacheKey, details, 600)
-      return details
-    } catch (error) {
+            'X-Goog-Api-Key':
+              this.apiKey,
+
+            'X-Goog-FieldMask': [
+              'places.id',
+              'places.displayName',
+              'places.formattedAddress',
+              'places.shortFormattedAddress',
+              'places.location',
+              'places.types',
+              'places.primaryType',
+              'places.businessStatus',
+              'places.internationalPhoneNumber',
+              'places.nationalPhoneNumber',
+              'places.websiteUri',
+              'places.googleMapsUri',
+              'places.currentOpeningHours',
+              'places.regularOpeningHours',
+              'places.fuelOptions',
+              'places.paymentOptions'
+            ].join(',')
+          },
+
+          timeout: 15000
+        }
+      )
+
+    const places =
+      Array.isArray(
+        response.data?.places
+      )
+        ? response.data.places
+        : []
+
+    const stations =
+      places
+        .map(place =>
+          this.normalizePlace(
+            place,
+            latitude,
+            longitude
+          )
+        )
+        .filter(Boolean)
+
+    cacheService.set(
+      cacheKey,
+      stations,
+      300
+    )
+
+    return stations
+  }
+
+  normalizePlace(
+    place,
+    userLat,
+    userLng
+  ) {
+    const lat =
+      Number(
+        place.location?.latitude
+      )
+
+    const lng =
+      Number(
+        place.location?.longitude
+      )
+
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng)
+    ) {
       return null
     }
+
+    const fuelPrices =
+      this.normalizeFuelPrices(
+        place.fuelOptions?.fuelPrices
+      )
+
+    return {
+      id:
+        `google_${place.id}`,
+
+      google_place_id:
+        place.id,
+
+      name:
+        place.displayName?.text ||
+        'Fuel Station',
+
+      address:
+        place.formattedAddress ||
+        place.shortFormattedAddress ||
+        null,
+
+      coordinates: {
+        lat,
+        lng
+      },
+
+      distance_km:
+        calculateDistance(
+          userLat,
+          userLng,
+          lat,
+          lng
+        ),
+
+      phone:
+        place.internationalPhoneNumber ||
+        place.nationalPhoneNumber ||
+        null,
+
+      website:
+        place.websiteUri ||
+        null,
+
+      google_maps_url:
+        place.googleMapsUri ||
+        null,
+
+      business_status:
+        place.businessStatus ||
+        null,
+
+      opening_hours:
+        place.currentOpeningHours ||
+        place.regularOpeningHours ||
+        null,
+
+      payment_options:
+        place.paymentOptions ||
+        null,
+
+      fuel_prices:
+        fuelPrices,
+
+      fuel_price_source:
+        fuelPrices.length
+          ? 'Google Places'
+          : null,
+
+      fuel_price_status:
+        fuelPrices.length
+          ? 'last_known_station_price'
+          : 'not_available',
+
+      source:
+        'google_places',
+
+      last_updated:
+        new Date().toISOString()
+    }
+  }
+
+  normalizeFuelPrices(
+    prices
+  ) {
+    if (
+      !Array.isArray(prices)
+    ) {
+      return []
+    }
+
+    return prices
+      .map(item => {
+        const units =
+          Number(
+            item.price?.units
+          )
+
+        const nanos =
+          Number(
+            item.price?.nanos
+          )
+
+        const value =
+          units +
+          nanos / 1_000_000_000
+
+        if (
+          !Number.isFinite(value)
+        ) {
+          return null
+        }
+
+        return {
+          fuel_type:
+            item.type ||
+            null,
+
+          price:
+            value,
+
+          currency:
+            item.price?.currencyCode ||
+            null,
+
+          update_time:
+            item.updateTime ||
+            null
+        }
+      })
+      .filter(Boolean)
   }
 }
 
-export const googlePlacesService = new GooglePlacesService()
+export const googlePlacesService =
+  new GooglePlacesService()
